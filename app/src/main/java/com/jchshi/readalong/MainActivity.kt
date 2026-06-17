@@ -11,7 +11,6 @@ import android.content.pm.PackageManager
 import android.graphics.drawable.GradientDrawable
 import android.graphics.Color
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.Settings
@@ -50,7 +49,6 @@ class MainActivity : Activity() {
         setContentView(createContentView())
 
         configureWebView()
-        requestRuntimePermissions()
 
         webView.loadUrl(getStartUrl())
     }
@@ -286,30 +284,6 @@ class MainActivity : Activity() {
             .setPositiveButton(R.string.add_site) { _, _ -> showAddSiteDialog() }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
-    }
-
-    private fun requestRuntimePermissions() {
-        val permissions = mutableListOf(Manifest.permission.RECORD_AUDIO)
-
-        when {
-            Build.VERSION.SDK_INT >= 33 -> {
-                permissions += Manifest.permission.READ_MEDIA_AUDIO
-                permissions += Manifest.permission.READ_MEDIA_IMAGES
-                permissions += Manifest.permission.READ_MEDIA_VIDEO
-            }
-            Build.VERSION.SDK_INT >= 29 -> {
-                permissions += Manifest.permission.READ_EXTERNAL_STORAGE
-            }
-            else -> {
-                permissions += Manifest.permission.READ_EXTERNAL_STORAGE
-                permissions += Manifest.permission.WRITE_EXTERNAL_STORAGE
-            }
-        }
-
-        val missing = permissions.filterNot(::hasPermission).toTypedArray()
-        if (missing.isNotEmpty()) {
-            requestPermissions(missing, PERMISSION_REQUEST)
-        }
     }
 
     private fun maybeGrantPendingWebPermission() {
