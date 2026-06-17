@@ -11,8 +11,8 @@ android {
         applicationId = "com.jchshi.readalong"
         minSdk = 23
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
 
     }
 
@@ -25,10 +25,19 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = rootProject.file("keystore/readalong-release.jks")
+            storePassword = "readalong-release"
+            keyAlias = "readalong"
+            keyPassword = "readalong-release"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 

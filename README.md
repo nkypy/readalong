@@ -36,3 +36,5 @@ object AppConfig {
 把这个目录推到 GitHub 后，进入 `Actions`，运行 `Android APK` workflow。
 
 产物会在 workflow 的 artifact 里，名称为 `readalong-arm64-apk`。
+
+CI 使用仓库里的固定 release keystore 签名，因此同包名 APK 后续可以覆盖升级。若设备上安装过早期 debug 签名版本，需要先卸载一次再安装新版。
