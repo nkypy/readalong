@@ -1,6 +1,5 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
 }
 
 android {
@@ -11,8 +10,8 @@ android {
         applicationId = "com.jchshi.readalong"
         minSdk = 23
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.1.0"
+        versionCode = 4
+        versionName = "1.1.1"
     }
 
     splits {
@@ -45,13 +44,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-}
-
-kotlin {
-    jvmToolchain(17)
 }
 
 dependencies {
