@@ -8,14 +8,13 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.drawable.GradientDrawable
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
 import android.provider.Settings
 import android.text.InputType
-import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.Window
 import android.view.WindowManager
@@ -30,14 +29,18 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.EditText
-import android.widget.FrameLayout
 import android.widget.Toast
 import org.json.JSONArray
+import kotlin.math.abs
 
 class MainActivity : Activity() {
     private lateinit var webView: WebView
     private var uploadCallback: ValueCallback<Array<Uri>>? = null
     private var pendingPermissionRequest: PermissionRequest? = null
+    private var edgeSwipeCandidate = false
+    private var edgeSwipeConsumed = false
+    private var edgeSwipeStartX = 0f
+    private var edgeSwipeStartY = 0f
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,11 +49,45 @@ class MainActivity : Activity() {
         window.statusBarColor = Color.TRANSPARENT
 
         webView = WebView(this)
-        setContentView(createContentView())
+        setContentView(webView)
 
         configureWebView()
 
         webView.loadUrl(getStartUrl())
+    }
+
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                edgeSwipeCandidate = event.x <= dp(24)
+                edgeSwipeConsumed = false
+                edgeSwipeStartX = event.x
+                edgeSwipeStartY = event.y
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (edgeSwipeCandidate && !edgeSwipeConsumed) {
+                    val deltaX = event.x - edgeSwipeStartX
+                    val deltaY = abs(event.y - edgeSwipeStartY)
+                    if (deltaX >= dp(72) && deltaY <= dp(48)) {
+                        edgeSwipeConsumed = true
+                        edgeSwipeCandidate = false
+                        showSiteChooser()
+                        return true
+                    }
+                }
+            }
+            MotionEvent.ACTION_UP,
+            MotionEvent.ACTION_CANCEL
+            -> {
+                edgeSwipeCandidate = false
+                if (edgeSwipeConsumed) {
+                    edgeSwipeConsumed = false
+                    return true
+                }
+            }
+        }
+
+        return super.dispatchTouchEvent(event)
     }
 
     override fun onResume() {
@@ -102,6 +139,9 @@ class MainActivity : Activity() {
             displayZoomControls = false
             useWideViewPort = true
             loadWithOverviewMode = true
+            userAgentString = WebSettings.getDefaultUserAgent(this@MainActivity)
+                .replace("; wv", "")
+                .replace(Regex("\\sVersion/\\S+"), "")
         }
 
         webView.webViewClient = object : WebViewClient() {
@@ -152,48 +192,6 @@ class MainActivity : Activity() {
         webView.setOnLongClickListener {
             showSiteChooser()
             true
-        }
-    }
-
-    private fun createContentView(): View {
-        return FrameLayout(this).apply {
-            addView(
-                webView,
-                FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                ),
-            )
-            addView(createSiteHandle(), siteHandleLayoutParams())
-        }
-    }
-
-    private fun createSiteHandle(): View {
-        return View(this).apply {
-            contentDescription = getString(R.string.choose_site)
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                setColor(Color.argb(132, 26, 115, 232))
-                cornerRadii = floatArrayOf(
-                    0f, 0f,
-                    dp(10), dp(10),
-                    dp(10), dp(10),
-                    0f, 0f,
-                )
-            }
-            elevation = dp(4)
-            alpha = 0.72f
-            setOnClickListener { showSiteChooser() }
-            setOnLongClickListener {
-                showUrlManager()
-                true
-            }
-        }
-    }
-
-    private fun siteHandleLayoutParams(): FrameLayout.LayoutParams {
-        return FrameLayout.LayoutParams(dpInt(10), dpInt(96)).apply {
-            gravity = Gravity.START or Gravity.CENTER_VERTICAL
         }
     }
 
