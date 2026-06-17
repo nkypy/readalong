@@ -11,9 +11,8 @@ android {
         applicationId = "com.jchshi.readalong"
         minSdk = 23
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.0.1"
-
+        versionCode = 3
+        versionName = "1.1.0"
     }
 
     splits {
@@ -53,4 +52,8 @@ android {
 
 kotlin {
     jvmToolchain(17)
+}
+
+dependencies {
+    implementation("org.mozilla.geckoview:geckoview-arm64-v8a:152.0.20260612001812")
 }

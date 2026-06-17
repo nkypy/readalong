@@ -1,12 +1,12 @@
 # Read Along Web APK
 
-一个基础 Kotlin Android WebView 壳应用，默认全屏打开：
+一个基础 Kotlin Android GeckoView 壳应用，默认全屏打开：
 
 https://readalong.google.com/
 
 ## 功能
 
-- 全屏 WebView，无额外标头。
+- 全屏 GeckoView，无额外标头，不依赖系统 Android WebView。
 - 只声明网络和麦克风权限；麦克风权限会在网页真正请求录音时再弹出。
 - WebRTC 麦克风授权会转交给网页。
 - 支持文件选择和下载；文件选择通过系统选择器完成，不申请照片/视频/音频读取权限。

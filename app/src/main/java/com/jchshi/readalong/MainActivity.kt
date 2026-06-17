@@ -3,7 +3,6 @@ package com.jchshi.readalong
 import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
-import android.app.DownloadManager
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -11,32 +10,29 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
-import android.os.Environment
 import android.provider.Settings
 import android.text.InputType
 import android.view.MotionEvent
 import android.view.View
 import android.view.Window
 import android.view.WindowManager
-import android.webkit.CookieManager
-import android.webkit.DownloadListener
-import android.webkit.PermissionRequest
-import android.webkit.URLUtil
-import android.webkit.ValueCallback
-import android.webkit.WebChromeClient
-import android.webkit.WebResourceRequest
-import android.webkit.WebSettings
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import android.widget.EditText
 import android.widget.Toast
 import org.json.JSONArray
+import org.mozilla.geckoview.AllowOrDeny
+import org.mozilla.geckoview.GeckoResult
+import org.mozilla.geckoview.GeckoRuntime
+import org.mozilla.geckoview.GeckoRuntimeSettings
+import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.GeckoSessionSettings
+import org.mozilla.geckoview.GeckoView
 import kotlin.math.abs
 
 class MainActivity : Activity() {
-    private lateinit var webView: WebView
-    private var uploadCallback: ValueCallback<Array<Uri>>? = null
-    private var pendingPermissionRequest: PermissionRequest? = null
+    private lateinit var geckoView: GeckoView
+    private lateinit var geckoSession: GeckoSession
+    private var canGoBack = false
+    private var permissionCallback: GeckoSession.PermissionDelegate.Callback? = null
     private var edgeSwipeCandidate = false
     private var edgeSwipeConsumed = false
     private var edgeSwipeStartX = 0f
@@ -48,12 +44,11 @@ class MainActivity : Activity() {
         window.setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN)
         window.statusBarColor = Color.TRANSPARENT
 
-        webView = WebView(this)
-        setContentView(webView)
+        geckoView = GeckoView(this)
+        setContentView(geckoView)
 
-        configureWebView()
-
-        webView.loadUrl(getStartUrl())
+        configureGeckoView()
+        geckoSession.loadUri(getStartUrl())
     }
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
@@ -96,19 +91,10 @@ class MainActivity : Activity() {
     }
 
     override fun onBackPressed() {
-        if (webView.canGoBack()) {
-            webView.goBack()
+        if (canGoBack) {
+            geckoSession.goBack()
         } else {
             super.onBackPressed()
-        }
-    }
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == FILE_CHOOSER_REQUEST) {
-            val results = WebChromeClient.FileChooserParams.parseResult(resultCode, data)
-            uploadCallback?.onReceiveValue(results)
-            uploadCallback = null
         }
     }
 
@@ -118,98 +104,119 @@ class MainActivity : Activity() {
         grantResults: IntArray,
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == PERMISSION_REQUEST) {
-            maybeGrantPendingWebPermission()
+        if (requestCode != PERMISSION_REQUEST) return
+
+        val callback = permissionCallback ?: return
+        permissionCallback = null
+
+        if (grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+            callback.grant()
+        } else {
+            callback.reject()
+            Toast.makeText(this, R.string.microphone_permission_required, Toast.LENGTH_LONG).show()
         }
     }
 
-    private fun configureWebView() {
-        CookieManager.getInstance().setAcceptCookie(true)
-        CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
+    override fun onDestroy() {
+        geckoSession.close()
+        super.onDestroy()
+    }
 
-        webView.settings.apply {
-            javaScriptEnabled = true
-            domStorageEnabled = true
-            databaseEnabled = true
-            mediaPlaybackRequiresUserGesture = false
-            cacheMode = WebSettings.LOAD_DEFAULT
-            loadsImagesAutomatically = true
-            mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-            builtInZoomControls = false
-            displayZoomControls = false
-            useWideViewPort = true
-            loadWithOverviewMode = true
-            userAgentString = WebSettings.getDefaultUserAgent(this@MainActivity)
-                .replace("; wv", "")
-                .replace(Regex("\\sVersion/\\S+"), "")
-        }
+    private fun configureGeckoView() {
+        val settings = GeckoSessionSettings.Builder()
+            .usePrivateMode(false)
+            .useTrackingProtection(false)
+            .build()
 
-        webView.webViewClient = object : WebViewClient() {
-            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                val uri = request.url
-                return if (uri.scheme == "http" || uri.scheme == "https") {
-                    false
-                } else {
-                    openExternal(uri)
-                    true
-                }
-            }
-        }
+        geckoSession = GeckoSession(settings)
+        geckoSession.setNavigationDelegate(navigationDelegate)
+        geckoSession.setPermissionDelegate(permissionDelegate)
 
-        webView.webChromeClient = object : WebChromeClient() {
-            override fun onPermissionRequest(request: PermissionRequest) {
-                if (request.resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
-                    pendingPermissionRequest = request
-                    if (hasPermission(Manifest.permission.RECORD_AUDIO)) {
-                        maybeGrantPendingWebPermission()
-                    } else {
-                        requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), PERMISSION_REQUEST)
-                    }
-                } else {
-                    request.deny()
-                }
-            }
+        val runtimeSettings = GeckoRuntimeSettings.Builder()
+            .javaScriptEnabled(true)
+            .remoteDebuggingEnabled(false)
+            .build()
 
-            override fun onShowFileChooser(
-                webView: WebView,
-                filePathCallback: ValueCallback<Array<Uri>>,
-                fileChooserParams: FileChooserParams,
-            ): Boolean {
-                uploadCallback?.onReceiveValue(null)
-                uploadCallback = filePathCallback
-                return try {
-                    startActivityForResult(fileChooserParams.createIntent(), FILE_CHOOSER_REQUEST)
-                    true
-                } catch (_: ActivityNotFoundException) {
-                    uploadCallback = null
-                    Toast.makeText(this@MainActivity, R.string.no_file_picker, Toast.LENGTH_SHORT).show()
-                    false
-                }
-            }
-        }
+        val runtime = GeckoRuntime.create(this, runtimeSettings)
+        geckoSession.open(runtime)
+        geckoView.setSession(geckoSession)
 
-        webView.setDownloadListener(downloadListener)
-        webView.setOnLongClickListener {
+        geckoView.setOnLongClickListener {
             showSiteChooser()
             true
         }
     }
 
-    private val downloadListener = DownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
-        try {
-            val fileName = URLUtil.guessFileName(url, contentDisposition, mimeType)
-            val request = DownloadManager.Request(Uri.parse(url))
-                .addRequestHeader("User-Agent", userAgent)
-                .setMimeType(mimeType)
-                .setTitle(fileName)
-                .setDescription(getString(R.string.downloading))
-                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+    private val navigationDelegate = object : GeckoSession.NavigationDelegate {
+        override fun onCanGoBack(session: GeckoSession, canGoBack: Boolean) {
+            this@MainActivity.canGoBack = canGoBack
+        }
 
-            getSystemService(DownloadManager::class.java).enqueue(request)
-            Toast.makeText(this, R.string.download_started, Toast.LENGTH_SHORT).show()
-        } catch (_: Exception) {
-            openExternal(Uri.parse(url))
+        override fun onLoadRequest(
+            session: GeckoSession,
+            request: GeckoSession.NavigationDelegate.LoadRequest,
+        ): GeckoResult<AllowOrDeny>? {
+            val uri = Uri.parse(request.uri)
+            return if (uri.scheme == "http" || uri.scheme == "https") {
+                GeckoResult.fromValue(AllowOrDeny.ALLOW)
+            } else {
+                openExternal(uri)
+                GeckoResult.fromValue(AllowOrDeny.DENY)
+            }
+        }
+
+        override fun onNewSession(session: GeckoSession, uri: String): GeckoResult<GeckoSession>? {
+            geckoSession.loadUri(uri)
+            return null
+        }
+    }
+
+    private val permissionDelegate = object : GeckoSession.PermissionDelegate {
+        override fun onAndroidPermissionsRequest(
+            session: GeckoSession,
+            permissions: Array<String>?,
+            callback: GeckoSession.PermissionDelegate.Callback,
+        ) {
+            val requested = permissions.orEmpty()
+            val allowed = requested.filter { it == Manifest.permission.RECORD_AUDIO }.toTypedArray()
+            if (allowed.size != requested.size) {
+                callback.reject()
+                return
+            }
+
+            val missing = allowed.filterNot(::hasPermission).toTypedArray()
+            if (missing.isEmpty()) {
+                callback.grant()
+            } else {
+                permissionCallback = callback
+                requestPermissions(missing, PERMISSION_REQUEST)
+            }
+        }
+
+        override fun onContentPermissionRequest(
+            session: GeckoSession,
+            perm: GeckoSession.PermissionDelegate.ContentPermission,
+        ): GeckoResult<Int>? {
+            return GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW)
+        }
+
+        override fun onMediaPermissionRequest(
+            session: GeckoSession,
+            uri: String,
+            video: Array<GeckoSession.PermissionDelegate.MediaSource>?,
+            audio: Array<GeckoSession.PermissionDelegate.MediaSource>?,
+            callback: GeckoSession.PermissionDelegate.MediaCallback,
+        ) {
+            val microphone = audio?.firstOrNull {
+                it.source == GeckoSession.PermissionDelegate.MediaSource.SOURCE_MICROPHONE
+            } ?: audio?.firstOrNull()
+
+            if (video != null || microphone == null) {
+                callback.reject()
+                return
+            }
+
+            callback.grant(null, microphone)
         }
     }
 
@@ -220,12 +227,12 @@ class MainActivity : Activity() {
             .setTitle(R.string.choose_site)
             .setItems(labels) { _, index ->
                 saveSelectedUrl(sites[index].url)
-                webView.loadUrl(sites[index].url)
+                geckoSession.loadUri(sites[index].url)
             }
             .setPositiveButton(R.string.add_site) { _, _ -> showAddSiteDialog() }
             .setNegativeButton(R.string.manage_sites) { _, _ -> showUrlManager() }
             .setNeutralButton(R.string.reload) { _, _ ->
-                webView.reload()
+                geckoSession.reload()
             }
             .show()
     }
@@ -254,7 +261,7 @@ class MainActivity : Activity() {
                     saveCustomSiteUrls(existing)
                 }
                 saveSelectedUrl(url)
-                webView.loadUrl(url)
+                geckoSession.loadUri(url)
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
@@ -275,25 +282,14 @@ class MainActivity : Activity() {
                 val remaining = customUrls.toMutableList().also { it.removeAt(index) }
                 saveCustomSiteUrls(remaining)
                 if (getSavedSelectedUrl() == removed) {
-                    saveSelectedUrl(AppConfig.sites[AppConfig.defaultSiteIndex].url)
-                    webView.loadUrl(AppConfig.sites[AppConfig.defaultSiteIndex].url)
+                    val defaultUrl = AppConfig.sites[AppConfig.defaultSiteIndex].url
+                    saveSelectedUrl(defaultUrl)
+                    geckoSession.loadUri(defaultUrl)
                 }
             }
             .setPositiveButton(R.string.add_site) { _, _ -> showAddSiteDialog() }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
-    }
-
-    private fun maybeGrantPendingWebPermission() {
-        val request = pendingPermissionRequest ?: return
-        pendingPermissionRequest = null
-
-        if (hasPermission(Manifest.permission.RECORD_AUDIO)) {
-            request.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
-        } else {
-            request.deny()
-            Toast.makeText(this, R.string.microphone_permission_required, Toast.LENGTH_LONG).show()
-        }
     }
 
     private fun hideSystemUi() {
@@ -388,6 +384,5 @@ class MainActivity : Activity() {
         private const val PREF_SELECTED_URL = "selected_url"
         private const val PREF_CUSTOM_URLS = "custom_urls"
         private const val PERMISSION_REQUEST = 100
-        private const val FILE_CHOOSER_REQUEST = 101
     }
 }
