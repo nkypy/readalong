@@ -1,35 +1,30 @@
 # Read Along Web APK
 
-一个基础 Kotlin Android GeckoView 壳应用，默认全屏打开：
+一个基础 Java Android Custom Tabs 启动器，默认打开：
 
 https://readalong.google.com/
 
 ## 功能
 
-- 全屏 GeckoView，无额外标头，不依赖系统 Android WebView。
-- 只声明网络和麦克风权限；麦克风权限会在网页真正请求录音时再弹出。
-- WebRTC 麦克风授权会转交给网页。
-- 支持文件选择和下载；文件选择通过系统选择器完成，不申请照片/视频/音频读取权限。
-- 支持多个网址：从屏幕左边缘向右滑动可打开网址菜单；长按网页区域也可打开。
-- 支持在应用内添加/删除自定义网址，后续切换不需要重新打包。
+- 使用 Chrome Custom Tabs，优先调用 Chrome，避免 Read Along 拒绝内嵌 WebView/GeckoView。
+- APK 本身只声明网络权限；麦克风、文件选择和下载由浏览器处理。
+- 支持多个内置网址：如果配置多个网址，启动时会弹出选择框。
 - GitHub Actions 直接打包 APK。
 
 ## 修改网址
 
-编辑 `app/src/main/java/com/jchshi/readalong/AppConfig.kt`：
+编辑 `app/src/main/java/com/jchshi/readalong/AppConfig.java`：
 
-```kotlin
-object AppConfig {
-    val sites = listOf(
-        WebEntry("Read Along", "https://readalong.google.com/"),
-        WebEntry("Example", "https://example.com/"),
-    )
+```java
+public final class AppConfig {
+    public static final List<WebEntry> SITES = Arrays.asList(
+        new WebEntry("Read Along", "https://readalong.google.com/"),
+        new WebEntry("Example", "https://example.com/")
+    );
 }
 ```
 
-应用内从屏幕左边缘向右滑动即可切换网址，选择结果会保存在设备本地。
-
-也可以直接在应用内点“添加网址”临时添加站点；这些自定义网址只保存在当前设备上。
+Custom Tabs 会显示浏览器自己的顶部栏；这个栏不能由第三方 APK 完全隐藏。
 
 ## GitHub CI 打包
 

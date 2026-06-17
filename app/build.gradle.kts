@@ -2,6 +2,10 @@ plugins {
     id("com.android.application")
 }
 
+dependencies {
+    implementation("androidx.browser:browser:1.9.0")
+}
+
 android {
     namespace = "com.jchshi.readalong"
     compileSdk = 35
@@ -10,8 +14,8 @@ android {
         applicationId = "com.jchshi.readalong"
         minSdk = 23
         targetSdk = 35
-        versionCode = 4
-        versionName = "1.1.1"
+        versionCode = 5
+        versionName = "1.2.0"
     }
 
     splits {
@@ -44,8 +48,4 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-}
-
-dependencies {
-    implementation("org.mozilla.geckoview:geckoview-arm64-v8a:143.0.20251003115653")
 }
