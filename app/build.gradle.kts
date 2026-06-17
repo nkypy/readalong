@@ -3,7 +3,7 @@ plugins {
 }
 
 dependencies {
-    implementation("androidx.browser:browser:1.9.0")
+    implementation("androidx.browser:browser:1.8.0")
 }
 
 android {
